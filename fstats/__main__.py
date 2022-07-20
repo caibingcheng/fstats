@@ -66,6 +66,18 @@ def winCreate():
 
     return win
 
+config = {
+    'high' : ['red', 'white'],
+    'mid': ['white', 'black'],
+    'low': ['white', 'black'], # ['green', 'white'],
+}
+
+def departLevel(cpu, mem):
+    if (cpu > 90 or mem > 90):
+        return 'high'
+    if (cpu < 20 and mem < 30):
+        return 'low'
+    return 'mid'
 
 def intervalProcess(win):
     textvariable = StringVar()
@@ -77,8 +89,13 @@ def intervalProcess(win):
 
     def refresh(textvariable):
         while True:
+            cpu = cpuStats()
+            mem = memStats()
             info = " {:<6}{:<5}%\n {:<5}{:<5}%".format(
-                "CPU:", cpuStats(), "MEM:", memStats())
+                "CPU:", cpu, "MEM:", mem)
+            configLevel = config[departLevel(cpu, mem)]
+            label['bg'] = configLevel[0]
+            label['fg'] = configLevel[1]
             textvariable.set(info)
             sleep(1)
 
