@@ -1,8 +1,10 @@
-from asyncio import constants
 from time import sleep
 from tkinter import *
 import threading
 import psutil
+import json
+import os
+from importlib.machinery import SourceFileLoader
 
 
 def diskStats():
@@ -15,6 +17,31 @@ def cpuStats():
 
 def memStats():
     return psutil.virtual_memory().percent
+
+
+def config():
+    userConfigPath = os.path.join(os.environ["HOME"], ".fstats", "config.json")
+    if os.path.exists(userConfigPath):
+        with open(userConfigPath, 'rb') as f:
+            return True, json.load(f)
+    else:
+        return False, None
+
+
+_user, _config = config()
+
+
+def get(keys, dft, conf=_config):
+    if not _user:
+        return dft
+    if len(keys) <= 0:
+        return dft
+    key = keys[0]
+    if key in conf.keys():
+        if len(keys) == 1:
+            return conf[key]
+        else:
+            return get(keys[1:], dft, conf[key])
 
 
 def winCreate():
@@ -30,7 +57,11 @@ def winCreate():
     win.attributes('-zoomed', False)
     win.attributes('-alpha', '0.8')
     win.attributes('-topmost', True)
-    win.geometry('96x48+{}+{}'.format(width - 96 - 50, heigth - 48 - 50))
+
+    userWidth = get(['width'], 96)
+    userHeight = get(['height'], 48)
+    win.geometry('{}x{}+{}+{}'.format(userWidth, userHeight,
+                 width - userWidth - 50, heigth - userHeight - 50))
     win.resizable(width=0, height=0)
 
     def StartMove(event):
@@ -66,11 +97,13 @@ def winCreate():
 
     return win
 
-config = {
-    'high' : ['red', 'white'],
+
+configStyle = {
+    'high': ['red', 'white'],
     'mid': ['white', 'black'],
-    'low': ['white', 'black'], # ['green', 'white'],
+    'low': ['white', 'black'],  # ['green', 'white'],
 }
+
 
 def departLevel(cpu, mem):
     if (cpu > 90 or mem > 90):
@@ -79,23 +112,41 @@ def departLevel(cpu, mem):
         return 'low'
     return 'mid'
 
+
 def intervalProcess(win):
     textvariable = StringVar()
 
-    label = Label(win, justify='left', anchor='w', bg='white', fg='black', cursor='fleur',
+    label = Label(win, justify='left', anchor='center', bg='white', fg='black', cursor='fleur',
+                  font=('Monospace', 10),
                   width=win.winfo_screenwidth(), height=win.winfo_screenheight(),
                   textvariable=textvariable)
     label.pack(padx=0, pady=0)
 
     def refresh(textvariable):
+        items = get(["items"], None)
+        infoItems = []
+        if items:
+            for item in items:
+                infoItems.append([item[0], None, item[2], SourceFileLoader(item[0], item[1]).load_module()])
+        style = get(["style"], None)
+        if style:
+            style = SourceFileLoader('style', style).load_module()
         while True:
-            cpu = cpuStats()
-            mem = memStats()
-            info = " {:<6}{:<5}%\n {:<5}{:<5}%".format(
-                "CPU:", cpu, "MEM:", mem)
-            configLevel = config[departLevel(cpu, mem)]
-            label['bg'] = configLevel[0]
-            label['fg'] = configLevel[1]
+            info = ""
+            if infoItems:
+                for item in infoItems:
+                    item[1] = item[-1].info()
+                if style:
+                    style.style(infoItems, label)
+                info = '\n'.join([item[2].format(item[0], item[1]) for item in infoItems])
+            else:
+                cpu = cpuStats()
+                mem = memStats()
+                info = "{:<3}: {:<5}%\n{:<3}: {:<5}%".format(
+                    "CPU", cpu, "MEM", mem)
+                configLevel = configStyle[departLevel(cpu, mem)]
+                label['bg'] = configLevel[0]
+                label['fg'] = configLevel[1]
             textvariable.set(info)
             sleep(1)
 

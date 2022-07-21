@@ -1,8 +1,12 @@
 from setuptools import setup, find_packages
+import os
+
+__version__ = os.environ["VERSION"].split('/')[-1][1:]
+print("get version", __version__)
 
 setup(
     name='fstats',
-    version="0.2",
+    version=__version__,
     author="bbing",
     install_requires=['psutil'],
     packages=find_packages(),
