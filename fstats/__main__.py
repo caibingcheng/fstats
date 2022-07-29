@@ -143,6 +143,8 @@ def winCreate():
     win.title('fstats')
     win.configure(bg='white')
     win.overrideredirect(True)
+    global mouseMenu
+    mouseMenu = None
 
     width = win.winfo_screenwidth()
     heigth = win.winfo_screenheight()
@@ -158,7 +160,13 @@ def winCreate():
                  width - userWidth - 50, heigth - userHeight - 50))
     win.resizable(width=0, height=0)
 
+    def DestroyMenu():
+        global mouseMenu
+        if isinstance(mouseMenu, Menu):
+            mouseMenu.destroy()
+
     def StartMove(event):
+        DestroyMenu()
         win.x = event.x
         win.y = event.y
 
@@ -177,15 +185,16 @@ def winCreate():
     win.bind("<ButtonRelease-1>", StopMove)
     win.bind("<B1-Motion>", OnMotion)
 
-    menu = Menu(win)
-
     def destroy():
         win.destroy()
-    menu.add_command(label='退出', command=destroy)
-    menu.add_command(label='取消')
 
     def popupmenu(event):
-        menu.post(event.x_root, event.y_root)
+        DestroyMenu()
+        global mouseMenu
+        mouseMenu = Menu(win)
+        mouseMenu.add_command(label='退出', command=destroy)
+        mouseMenu.add_command(label='取消', command=mouseMenu.destroy)
+        mouseMenu.post(event.x_root, event.y_root)
 
     win.bind("<ButtonPress-3>", popupmenu)
 
@@ -214,7 +223,6 @@ def intervalProcess(win):
             style.style(infoItems, label)
             info = versionMethod['info'](infoItems)
             textvariable.set(info)
-            sleep(1)
 
     thread = threading.Thread(target=refresh, args=(textvariable,))
     thread.daemon = True
