@@ -7,16 +7,108 @@ import os
 from importlib.machinery import SourceFileLoader
 
 
-def diskStats():
-    return psutil.disk_usage('/')
+HeightDefault = 48
+WidthDefault = 96
 
 
-def cpuStats():
-    return psutil.cpu_percent(interval=1)
+class DiskInfoDefault():
+    @staticmethod
+    def info():
+        return psutil.disk_usage('/')
 
 
-def memStats():
-    return psutil.virtual_memory().percent
+class CPUInfoDefault():
+    @staticmethod
+    def info():
+        return psutil.cpu_percent(interval=1)
+
+
+class MEMInfoDefault():
+    @staticmethod
+    def info():
+        return psutil.virtual_memory().percent
+
+
+class StyleDefault():
+    @staticmethod
+    def style(infoItems, label):
+        high = False
+        for item in infoItems:
+            if item[0] in {'CPU', 'MEM'} and item[1] > 90:
+                high = True
+        if high:
+            label['bg'] = 'red'
+            label['fg'] = 'white'
+        else:
+            label['bg'] = 'white'
+            label['fg'] = 'black'
+
+
+ItemsDefault = [
+    ["CPU", CPUInfoDefault, "{:<3}: {:<5}%"],
+    ["MEM", MEMInfoDefault, "{:<3}: {:<5}%"],
+]
+
+
+def ModuleLoader(name, module):
+    if isinstance(module, str):
+        return {
+            'py': SourceFileLoader(name, module).load_module(),
+        }[module.split('.')[-1]]
+    else:
+        return module
+
+
+def V1Constructor(item):
+    return [
+        item[0],
+        None,
+        item[2],
+        ModuleLoader(item[0], item[1]),
+    ]
+
+
+def V2Constructor(item):
+    return {
+        "header": item[0],
+        "content": None,
+        "format": item[2],
+        "module": ModuleLoader(item[0], item[1]),
+    }
+
+
+def V1ReadInfo(items):
+    for item in items:
+        item[1] = item[-1].info()
+
+
+def V2ReadInfo(items):
+    for item in items:
+        item['content'] = item['module'].info()
+
+
+def V1Info(items):
+    return '\n'.join([item[2].format(item[0], item[1])
+                      for item in items])
+
+
+def V2Info(items):
+    return '\n'.join([item['format'].format(
+        item['header'], item['content']) for item in items])
+
+
+ItemsVersionMethod = {
+    'v1': {
+        'constructor': V1Constructor,
+        'info': V1Info,
+        'read': V1ReadInfo,
+    },
+    'v2': {
+        'constructor': V2Constructor,
+        'info': V2Info,
+        'read': V2ReadInfo,
+    },
+}
 
 
 def config():
@@ -42,6 +134,8 @@ def get(keys, dft, conf=_config):
             return conf[key]
         else:
             return get(keys[1:], dft, conf[key])
+    else:
+        return dft
 
 
 def winCreate():
@@ -58,8 +152,8 @@ def winCreate():
     win.attributes('-alpha', '0.8')
     win.attributes('-topmost', True)
 
-    userWidth = get(['width'], 96)
-    userHeight = get(['height'], 48)
+    userWidth = get(['width'], WidthDefault)
+    userHeight = get(['height'], HeightDefault)
     win.geometry('{}x{}+{}+{}'.format(userWidth, userHeight,
                  width - userWidth - 50, heigth - userHeight - 50))
     win.resizable(width=0, height=0)
@@ -98,21 +192,6 @@ def winCreate():
     return win
 
 
-configStyle = {
-    'high': ['red', 'white'],
-    'mid': ['white', 'black'],
-    'low': ['white', 'black'],  # ['green', 'white'],
-}
-
-
-def departLevel(cpu, mem):
-    if (cpu > 90 or mem > 90):
-        return 'high'
-    if (cpu < 20 and mem < 30):
-        return 'low'
-    return 'mid'
-
-
 def intervalProcess(win):
     textvariable = StringVar()
 
@@ -123,30 +202,17 @@ def intervalProcess(win):
     label.pack(padx=0, pady=0)
 
     def refresh(textvariable):
-        items = get(["items"], None)
-        infoItems = []
-        if items:
-            for item in items:
-                infoItems.append([item[0], None, item[2], SourceFileLoader(item[0], item[1]).load_module()])
-        style = get(["style"], None)
-        if style:
-            style = SourceFileLoader('style', style).load_module()
+        style = get(["style"], StyleDefault)
+        items = get(["items"], ItemsDefault)
+        versionMethod = ItemsVersionMethod[get(["version"], 'v1')]
+
+        style = ModuleLoader('style', style)
+        infoItems = [versionMethod['constructor'](item) for item in items]
+
         while True:
-            info = ""
-            if infoItems:
-                for item in infoItems:
-                    item[1] = item[-1].info()
-                if style:
-                    style.style(infoItems, label)
-                info = '\n'.join([item[2].format(item[0], item[1]) for item in infoItems])
-            else:
-                cpu = cpuStats()
-                mem = memStats()
-                info = "{:<3}: {:<5}%\n{:<3}: {:<5}%".format(
-                    "CPU", cpu, "MEM", mem)
-                configLevel = configStyle[departLevel(cpu, mem)]
-                label['bg'] = configLevel[0]
-                label['fg'] = configLevel[1]
+            versionMethod['read'](infoItems)
+            style.style(infoItems, label)
+            info = versionMethod['info'](infoItems)
             textvariable.set(info)
             sleep(1)
 
